@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GitHub 汉化
 // @namespace    https://github.com/nonPlanB/TampermonkeyUserScript
-// @version      2.0.0-local.20261105
-// @description  修复新版仓库页面识别与动态翻译；内置完整简体词库，保留代码与用户内容。
+// @version      2.0.1-local.20261105
+// @description  修复新版仓库及首页动态翻译、输入框提示和侧栏漏译；内置简体词库，保留代码与用户内容。
 // @author       nonPlanB
 // @homepageURL  https://github.com/nonPlanB/TampermonkeyUserScript
 // @supportURL   https://github.com/nonPlanB/TampermonkeyUserScript/issues
@@ -264,8 +264,6 @@ I18N.conf = {
             'optgroup > option', // 下拉菜单列表
         ],
         'dashboard': [
-            '.js-notice-dismiss', // 右侧栏 广告
-            '.TimelineItem', // 右侧栏 最新变化
             'section.comment-body', // 发布版正文
         ],
         'gist': [
@@ -2259,6 +2257,7 @@ I18N["zh-CN"]["page-dashboard"] = { // 已登录的首页 - 仪表板（含组�
     "static": { // 静态翻译
         // 顶部 GPT 聊天窗口
         "Ask anything or type @ to add context": "询问任何问题或输入 @ 来添加上下文",
+        "Agent": "智能体",
         "Ask": "询问",
         "Send": "发送",
         "Feedback": "反馈",
@@ -2340,6 +2339,7 @@ I18N["zh-CN"]["page-dashboard"] = { // 已登录的首页 - 仪表板（含组�
 
         "Try the new experience": "尝试新版",
         "Try the new dashboard experience": "试用新仪表板",
+        "Try the new dashboard": "试用新版仪表板",
         "Switch to classic dashboard": "切换到经典仪表板",
         "Give dashboard feedback": "提供仪表板反馈",
             "How satisfied are you with this dashboard?": "您对这个仪表板的满意程度如何？",
@@ -2609,6 +2609,9 @@ I18N["zh-CN"]["page-dashboard"] = { // 已登录的首页 - 仪表板（含组�
         "Member statuses": "成员状态", // 组织
 
         // 仪表板右上方看板
+        "Catch up on all that was announced.": "了解所有已公布的新动态。",
+        "See what's new": "查看最新动态",
+        "See what’s new": "查看最新动态",
         "The world’s fair of software is here.": "世界软件博览会就在这里。",
         "The GitHub Universe call for sessions is now open! Apply to share your expertise by submitting a session proposal today. Plus, get 35% off your tickets to GitHub Universe only for a limited time.": "GitHub Universe 的会议征集现已开启！立即提交您的会议提案，分享您的专业知识。此外，现在限时可享 35% 的 GitHub Universe 会议门票折扣。",
 
@@ -30666,7 +30669,8 @@ I18N["zh-CN"]["repository/agents"] = {
         'Type / to search': '输入 / 搜索', 'Type': '输入', 'to search': '搜索',
         'Pin': '置顶', 'Unpin': '取消置顶', 'No contributors': '无贡献者',
         'Suggested workflows': '建议的工作流', 'Readme': '自述文件',
-        'No releases published': '尚未发布版本', 'No packages published': '尚未发布软件包'
+        'No releases published': '尚未发布版本', 'No packages published': '尚未发布软件包',
+        'Yesterday': '昨天'
     };
     const countRules = [
         [/^([\d,]+) branch(?:es)?$/i, '$1 个分支'], [/^([\d,]+) tags?$/i, '$1 个标签'],
@@ -30678,18 +30682,22 @@ I18N["zh-CN"]["repository/agents"] = {
         catch { return fallback; }
     };
     let regexEnabled = !!readSetting('enable_RegExp', true);
-    let page = '', currentURL = '', ignore = '', staticDict = {}, regexRules = [], selectors = [];
+    let page = '', currentURL = '', ignore = '', attributeIgnore = '', staticDict = {}, regexRules = [], selectors = [];
     const cache = new Map();
     const ownWrites = new WeakMap();
     const timeObservers = new WeakMap();
     const descriptions = new WeakMap();
     const pending = new Set();
     let timer = 0, titleDirty = false;
-    const attributes = ['placeholder', 'aria-label', 'title', 'data-confirm', 'data-confirm-text',
+    const attributes = ['placeholder', 'data-placeholder', 'aria-placeholder', 'aria-label', 'title', 'data-confirm', 'data-confirm-text',
         'data-confirm-cancel-text', 'cancel-confirm-text', 'data-disable-with', 'data-visible-text', 'label', 'value'];
     // Do not blanket-ignore the React header or the shared Primer portal.
     const excludedIgnores = new Set(['header.GlobalNav', 'header.GlobalNav [class*="Search-module__"]',
         '#__primerPortalRoot__', 'input', 'textarea']);
+    // Editable text stays untouched; the editor's own UI attributes may be localized.
+    const editableSelector = 'textarea, [contenteditable]:not([contenteditable="false"])';
+    const textOnlyIgnores = new Set(['textarea', '[contenteditable=""]', '[contenteditable="true"]',
+        '[contenteditable="plaintext-only"]', '[contenteditable]:not([contenteditable="false"])']);
     const protectedSelectors = [
         'script', 'style', 'noscript', 'template', 'code', 'pre', 'kbd', 'svg', 'canvas',
         '.markdown-body', '.comment-body', '.js-preview-body', '.markdown-title',
@@ -30725,7 +30733,7 @@ I18N["zh-CN"]["repository/agents"] = {
             'www.githubstatus.com': 'status', 'education.github.com': 'education'};
         if (sites[hostname]) return sites[hostname];
         const parts = pathname.split('/').filter(Boolean);
-        if (!parts.length) return document.body?.classList.contains('logged-in')
+        if (!parts.length || (parts.length === 1 && parts[0] === 'home')) return document.body?.classList.contains('logged-in')
             ? (locale.dashboard ? 'dashboard' : 'page-dashboard') : 'homepage';
         if (parts[0] === 'orgs' || parts[0] === 'organizations') {
             const result = match(conf.rePagePathOrg, pathname);
@@ -30764,9 +30772,11 @@ I18N["zh-CN"]["repository/agents"] = {
             ...(conf.ignoreSelectorPage?.[page] || [])].filter(s => !excludedIgnores.has(s)
                 && s !== 'tr.react-directory-row' && !(page === 'repository' && s === 'li.mt-2'));
         // Validate separately so one outdated selector cannot stop the translator.
-        ignore = [...new Set([...protectedSelectors, ...rules])].filter(s => {
+        const validIgnores = [...new Set([...protectedSelectors, ...rules])].filter(s => {
             try { document.querySelector(s); return true; } catch { return false; }
-        }).join(',');
+        });
+        ignore = validIgnores.join(',');
+        attributeIgnore = validIgnores.filter(s => !textOnlyIgnores.has(s)).join(',');
         cache.clear();
         return true;
     }
@@ -30807,9 +30817,13 @@ I18N["zh-CN"]["repository/agents"] = {
         else node[field] = value;
     }
 
-    function isProtected(node) {
+    function isProtected(node, selector = ignore) {
         const element = node.nodeType === 1 ? node : node.parentElement;
-        return !element || !!element.closest(ignore);
+        return !element || !!element.closest(selector);
+    }
+
+    function canTranslateAttributes(el) {
+        return !isProtected(el) || (el.matches(editableSelector) && !isProtected(el, attributeIgnore));
     }
 
     function translateAttributes(el) {
@@ -30830,7 +30844,7 @@ I18N["zh-CN"]["repository/agents"] = {
         let node;
         while ((node = walk.nextNode())) {
             if (node.parentElement?.closest('style,script')) continue;
-            write(node, 'data', replaceByRules(node.data, rules));
+            write(node, 'data', replaceByRules(translate(node.data), rules));
         }
         if (root !== el && !timeObservers.has(root)) {
             const observer = new MutationObserver(() => {
@@ -30842,19 +30856,23 @@ I18N["zh-CN"]["repository/agents"] = {
     }
 
     function traverse(root) {
-        if (!root || !root.isConnected || isProtected(root)) return;
+        if (!root || !root.isConnected) return;
         const visit = node => {
-            if (node.nodeType === 3) write(node, 'data', translate(node.data));
+            if (node.nodeType === 3 && !isProtected(node)) write(node, 'data', translate(node.data));
             else if (node.nodeType === 1) {
-                translateAttributes(node);
+                if (canTranslateAttributes(node)) translateAttributes(node);
+                if (isProtected(node)) return;
                 if (/^(RELATIVE-TIME|TIME-AGO|LOCAL-TIME|TIME)$/.test(node.tagName)) translateTime(node);
             }
         };
         visit(root);
-        if (root.nodeType !== 1 || root.tagName === 'INPUT') return;
+        if (root.nodeType !== 1 || root.tagName === 'INPUT' || isProtected(root)) return;
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
             acceptNode(node) {
-                return isProtected(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+                if (!isProtected(node) || (node.nodeType === 1 && canTranslateAttributes(node))) {
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+                return NodeFilter.FILTER_REJECT;
             }
         });
         let node;
@@ -30992,7 +31010,7 @@ I18N["zh-CN"]["repository/agents"] = {
                 const own = ownWrites.get(target);
                 const now = type === 'attributes' ? target.getAttribute(field) : target.data;
                 if (type !== 'childList' && own?.has(field) && own.get(field) === now) continue;
-                if (isProtected(target)) continue;
+                if (isProtected(target) && !(type === 'attributes' && canTranslateAttributes(target))) continue;
                 if (type === 'childList') {
                     for (const node of mutation.addedNodes) schedule(node);
                 } else schedule(target);

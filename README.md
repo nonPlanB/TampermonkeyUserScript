@@ -26,7 +26,7 @@
 
 | 脚本 | 当前源码版本 | 主要用途 | 匹配范围 |
 | --- | --- | --- | --- |
-| [GitHub汉化.js](./GitHub汉化.js) | `2.0.0-local.20261105` | 内置简体中文词库、动态界面翻译、手动翻译简介 | `https://github.com/*`、`https://gist.github.com/*`、`https://skills.github.com/*`、`https://education.github.com/*`、`https://www.githubstatus.com/*` |
+| [GitHub汉化.js](./GitHub汉化.js) | `2.0.1-local.20261105` | 内置简体中文词库、动态界面翻译、手动翻译简介 | `https://github.com/*`、`https://gist.github.com/*`、`https://skills.github.com/*`、`https://education.github.com/*`、`https://www.githubstatus.com/*` |
 | [抖音美化.js](./抖音美化.js) | `2025.10.5` | 界面精简、视频过滤、画质与全屏设置、直播优化、移动分享页适配 | `*://*.douyin.com/*`、`*://*.iesdouyin.com/*` |
 
 > 抖音脚本包含桌面页面和移动分享页的不同配置。桌面浏览器可以运行脚本，并不代表所有移动浏览器都支持 Tampermonkey；移动端需使用支持相应扩展的浏览器，具体功能以实际页面为准。
@@ -97,6 +97,8 @@ Chrome/Edge 等 Chromium 浏览器还可能要求单独开启用户脚本执行�
 安装并启用后，访问匹配网站即可自动工作，不需要另外下载词库。覆盖内容包括导航、菜单、按钮、提示、部分表单占位文字和无障碍标签，以及词库已收录的页面标题。
 
 词库包含仓库、Issue、Pull Request、Actions、设置、个人和组织页面等常见场景，并提供 Gist、Skills、Education 和 GitHub Status 的相应词条。未收录的英文会保留，不能保证所有页面完全汉化。
+
+首页支持 `/`、`/home`、`/dashboard` 和 `/feed` 的界面词条，包括 Copilot 输入框提示、新版仪表板入口、推广卡片及更新时间。编辑框只翻译占位提示和无障碍标签，输入内容继续保留原文；更新日志文章标题等未收录内容仍可能显示英文。
 
 ### 动态页面与时间显示
 

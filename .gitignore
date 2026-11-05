@@ -1,0 +1,24 @@
+# 本地测试代码
+tests/
+test/
+__tests__/
+*.test.*
+*.spec.*
+
+# 测试报告、覆盖率及浏览器测试缓存
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+coverage/
+.nyc_output/
+
+# 本地依赖与临时日志
+node_modules/
+*.log
+*.tmp
+*.temp
+
+# 系统生成文件
+.DS_Store
+Thumbs.db
