@@ -10419,6 +10419,8 @@ I18N["zh-CN"]["repository/issues"] = { // 仓库 - 议题页面
             "Issues are used to track todos, bugs, feature requests, and more. As issues are created, they’ll appear here in a searchable and filterable list. To get started, you should": "议题用于跟踪待办事项、错误、功能请求等。创建议题后，它们将出现在可搜索和可筛选的列表中。要开始，您应该",
             "create an issue": "创建议题",
                 "Open issue creation in fullscreen": "全屏", // 有议题模板时
+                "Report a security vulnerability": "报告安全漏洞",
+                "Please review our security policy for more details": "请查阅我们的安全政策，了解详情",
 
             "Label issues and pull requests for new contributors": "标记新贡献者的议题和拉取请求",
             "Now, GitHub will help potential first-time contributors": "现在，GitHub 将帮助潜在的首次贡献者",
@@ -10828,6 +10830,8 @@ I18N["zh-CN"]["repository/issues"] = { // 仓库 - 议题页面
 
             "Edit": "编辑",
             "Issue body actions": "菜单", // 原文过于啰嗦，直接省略
+            "Add artifact": "添加附件",
+            "Add reaction": "添加表情回应",
 
             // 状态词 同 /<user-name>/<repo-name>/pull/<id>
             "changed the title": "修改了标题",
@@ -30688,6 +30692,12 @@ I18N["zh-CN"]["repository/agents"] = {
     const timeObservers = new WeakMap();
     const descriptions = new WeakMap();
     const pending = new Set();
+    const issueFilterInput = '#issues-index-filter-input';
+    const issueFilterMirror = '#issues-index-filter .styled-input-content[aria-hidden="true"]';
+    const issueFilterCaptions = new Map([
+        ['is:issue state:open', '未关闭的议题'],
+        ['is:issue state:closed', '已关闭的议题']
+    ]);
     let timer = 0, titleDirty = false;
     const attributes = ['placeholder', 'data-placeholder', 'aria-placeholder', 'aria-label', 'title', 'data-confirm', 'data-confirm-text',
         'data-confirm-cancel-text', 'cancel-confirm-text', 'data-disable-with', 'data-visible-text', 'label', 'value'];
@@ -30791,10 +30801,13 @@ I18N["zh-CN"]["repository/agents"] = {
         return text;
     }
 
-    function translate(text) {
+    function translate(text, element) {
         if (typeof text !== 'string' || text.length > 1000 || !/[a-zA-Z]/.test(text)) return text;
         const trimmed = text.trim(), key = trimmed.replace(/\s+/g, ' ');
-        let value = cache.get(key);
+        // In issue controls, "React" is an action. Elsewhere it may be the framework name.
+        const isReactionAction = page === 'repository/issues' && key === 'React'
+            && element?.closest('tool-tip, [role="tooltip"], [data-component="Tooltip"], button:has(.octicon-smiley)');
+        let value = isReactionAction ? '添加表情回应' : cache.get(key);
         if (value === undefined) {
             value = Object.hasOwn(staticDict, key) ? staticDict[key] : key;
             if (value === key && regexEnabled) value = replaceByRules(key, regexRules);
@@ -30831,7 +30844,7 @@ I18N["zh-CN"]["repository/agents"] = {
             if (!el.hasAttribute(name)) continue;
             if (name === 'value' && !(el.tagName === 'INPUT' && /^(button|submit|reset)$/.test(el.type))) continue;
             if (name === 'label' && el.tagName !== 'OPTGROUP') continue;
-            write(el, name, translate(el.getAttribute(name)), true);
+            write(el, name, translate(el.getAttribute(name), el), true);
         }
     }
 
@@ -30858,7 +30871,7 @@ I18N["zh-CN"]["repository/agents"] = {
     function traverse(root) {
         if (!root || !root.isConnected) return;
         const visit = node => {
-            if (node.nodeType === 3 && !isProtected(node)) write(node, 'data', translate(node.data));
+            if (node.nodeType === 3 && !isProtected(node)) write(node, 'data', translate(node.data, node.parentElement));
             else if (node.nodeType === 1) {
                 if (canTranslateAttributes(node)) translateAttributes(node);
                 if (isProtected(node)) return;
@@ -30908,6 +30921,31 @@ I18N["zh-CN"]["repository/agents"] = {
         }
         // Never blank an unknown title, and never apply repository text rules to its name.
         if (value && value !== title) document.title = value;
+    }
+
+    function translateIssueFilter() {
+        const input = document.querySelector(issueFilterInput);
+        const mirror = input?.closest('.styled-input-container')?.querySelector('.styled-input-content[aria-hidden="true"]');
+        if (!mirror?.closest('#issues-index-filter')) return;
+        const query = input.value.trim().replace(/\s+/g, ' ');
+        const caption = mirror.textContent.trim().replace(/\s+/g, ' ') === query && issueFilterCaptions.get(query);
+        if (!caption) {
+            mirror.removeAttribute('data-ghc-issue-filter-caption');
+            return;
+        }
+        // Keep both React's mirror and the actual input intact. Only change the idle display.
+        if (!document.getElementById('ghc-issue-filter-style')) {
+            const style = document.createElement('style');
+            style.id = 'ghc-issue-filter-style';
+            const selector = '#issues-index-filter .styled-input-container:not(:focus-within) '
+                + '.styled-input-content[data-ghc-issue-filter-caption]';
+            style.textContent = `
+                ${selector} > * { display: none; }
+                ${selector}::after { content: attr(data-ghc-issue-filter-caption); color: var(--fgColor-default, inherit); }
+            `;
+            document.head.append(style);
+        }
+        mirror.dataset.ghcIssueFilterCaption = caption;
     }
 
     function addDescriptionButton() {
@@ -30988,6 +31026,7 @@ I18N["zh-CN"]["repository/agents"] = {
             if (!nested) { traverse(root); applySelectors(root); }
         }
         if (titleDirty) { titleDirty = false; translateTitle(); }
+        if (page === 'repository/issues') translateIssueFilter();
         addDescriptionButton();
     }
 
@@ -31010,7 +31049,11 @@ I18N["zh-CN"]["repository/agents"] = {
                 const own = ownWrites.get(target);
                 const now = type === 'attributes' ? target.getAttribute(field) : target.data;
                 if (type !== 'childList' && own?.has(field) && own.get(field) === now) continue;
-                if (isProtected(target) && !(type === 'attributes' && canTranslateAttributes(target))) continue;
+                if (isProtected(target) && !(type === 'attributes' && canTranslateAttributes(target))) {
+                    const element = target.nodeType === 1 ? target : target.parentElement;
+                    if (page === 'repository/issues' && type !== 'attributes' && element?.closest(issueFilterMirror)) schedule();
+                    continue;
+                }
                 if (type === 'childList') {
                     for (const node of mutation.addedNodes) schedule(node);
                 } else schedule(target);
@@ -31020,6 +31063,9 @@ I18N["zh-CN"]["repository/agents"] = {
         // Observe the document element so body/head replacement during navigation is covered.
         observer.observe(document.documentElement, {subtree: true, childList: true, characterData: true,
             attributes: true, attributeFilter: [...attributes, 'content']});
+        document.addEventListener('input', event => {
+            if (page === 'repository/issues' && event.target.matches(issueFilterInput)) translateIssueFilter();
+        });
         const navigate = () => { titleDirty = true; schedule(document.body); };
         for (const event of ['popstate', 'hashchange', 'urlchange', 'pageshow',
             'turbo:load', 'turbo:render', 'turbo:frame-load', 'pjax:end']) window.addEventListener(event, navigate);
